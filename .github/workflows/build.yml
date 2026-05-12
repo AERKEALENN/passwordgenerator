@@ -46,24 +46,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Configure Qt5
+      - name: Install CMake and Qt5
         run: |
-          choco install cmake qt5 -y --force
+          choco install cmake qt5 -y
 
       - name: Configure with CMake
-        shell: pwsh
+        shell: bash
         run: |
-          $env:Path = "C:\Program Files\CMake\bin;C:\Qt\5.*\mingw*\bin;C:\tools\mingw64\bin;$env:Path"
+          export PATH="/c/Program Files/CMake/bin:/c/Qt/5.*/mingw*/bin:/c/tools/mingw64/bin:$PATH"
           mkdir build
           cd build
           cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release ..
           cmake --build . --config Release
 
+      - name: Find Windows binary
+        run: |
+          find build -name "*.exe" -type f 2>/dev/null || echo "No exe found"
+
       - name: Upload Windows binary
         uses: actions/upload-artifact@v4
         with:
           name: windows-binary
-          path: build/Release/passwordgenerator.exe
+          path: build/passwordgenerator.exe
           retention-days: 30
 
   build-macos:
@@ -78,7 +82,6 @@ jobs:
           brew install cmake
 
       - name: Configure with CMake
-        shell: zsh
         run: |
           export CMAKE_PREFIX_PATH="$(brew --prefix qt5)"
           mkdir build
