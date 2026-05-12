@@ -1,0 +1,22 @@
+#!/bin/bash
+# Post-installation script for passwordgenerator
+
+set -e
+
+case "$1" in
+    configure)
+        echo "正在更新图标缓存..."
+        if command -v gtk-update-icon-cache &> /dev/null; then
+            gtk-update-icon-cache -f -t /usr/share/icons/hicolor || true
+        fi
+        
+        echo "正在注册桌面快捷方式..."
+        if command -v update-desktop-database &> /dev/null; then
+            update-desktop-database /usr/share/applications || true
+        fi
+        
+        echo "密码生成器安装完成！"
+        ;;
+esac
+
+exit 0

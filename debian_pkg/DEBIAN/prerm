@@ -1,0 +1,15 @@
+#!/bin/bash
+# Pre-removal script for passwordgenerator
+
+set -e
+
+case "$1" in
+    remove|upgrade|deconfigure)
+        echo "正在清理密码生成器..."
+        if command -v update-desktop-database &> /dev/null; then
+            update-desktop-database /usr/share/applications || true
+        fi
+        ;;
+esac
+
+exit 0

@@ -1,0 +1,41 @@
+# Build directories
+build/
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.a
+
+# Qt specific
+*.pro.user
+*.autosave
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+Makefile*
+*.mkdir
+
+# IDE files
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.sublime-*
+
+# .deb packages (don't track the package itself in git)
+*.deb
+
+# OS specific
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
