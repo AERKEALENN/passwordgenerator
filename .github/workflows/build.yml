@@ -15,12 +15,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Qt5
         run: |
           sudo apt-get update
-          sudo apt-get install -y qtbase5-dev qtchooser qt5-qmake qtbase5-dev-tools libqt5widgets5 libqt5gui5
+          sudo apt-get install -y qtbase5-dev qtchooser qt5-qmake qtbase5-dev-tools libqt5widgets5 libqt5gui5 libqt5core5a
 
       - name: Configure with CMake
         run: |
@@ -35,6 +35,7 @@ jobs:
 
       - name: Create Debian package
         run: |
+          set -e
           mkdir -p pkg/usr/bin
           mkdir -p pkg/usr/share/applications
           mkdir -p pkg/usr/share/icons/hicolor/16x16/apps
@@ -44,59 +45,78 @@ jobs:
           mkdir -p pkg/usr/share/icons/hicolor/64x64/apps
           mkdir -p pkg/usr/share/icons/hicolor/128x128/apps
           mkdir -p pkg/usr/share/icons/hicolor/256x256/apps
+          mkdir -p pkg/DEBIAN
 
           cp build/passwordgenerator pkg/usr/bin/
+          chmod +x pkg/usr/bin/passwordgenerator
 
           cat > pkg/usr/share/applications/passwordgenerator.desktop << 'EOF'
-          [Desktop Entry]
-          Version=1.0
-          Type=Application
-          Name=密码生成器
-          Name[en_US]=Password Generator
-          Comment=A simple and secure password generator tool
-          Exec=passwordgenerator
-          Icon=passwordgenerator
-          Terminal=false
-          Categories=Utility;Security;
-          EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=密码生成器
+Name[en_US]=Password Generator
+Comment=A simple and secure password generator tool
+Exec=passwordgenerator
+Icon=passwordgenerator
+Terminal=false
+Categories=Utility;Security;
+EOF
 
-          cp icons/hicolor/*/apps/passwordgenerator.png pkg/usr/share/icons/hicolor/*/apps/
+          for size in 16 24 32 48 64 128 256; do
+            if [ -f "icons/hicolor/${size}x${size}/apps/passwordgenerator.png" ]; then
+              cp "icons/hicolor/${size}x${size}/apps/passwordgenerator.png" "pkg/usr/share/icons/hicolor/${size}x${size}/apps/"
+            fi
+          done
 
-          mkdir -p pkg/DEBIAN
           cat > pkg/DEBIAN/control << 'EOF'
-          Package: passwordgenerator
-          Version: 1.0.0
-          Section: utils
-          Priority: optional
-          Architecture: amd64
-          Depends: libc6 (>= 2.17), libqt5widgets5 (>= 5.6.0), libqt5gui5 (>= 5.6.0), libqt5core5a (>= 5.6.0)
-          Maintainer: Password Generator Team
-          Description: A Qt5-based password generator tool
-           A simple and secure password generator with graphical interface.
-          EOF
+Package: passwordgenerator
+Version: 1.0.0
+Section: utils
+Priority: optional
+Architecture: amd64
+Depends: libc6 (>= 2.17), libqt5widgets5 (>= 5.6.0), libqt5gui5 (>= 5.6.0), libqt5core5a (>= 5.6.0)
+Maintainer: Password Generator Team
+Description: A Qt5-based password generator tool
+ A simple and secure password generator with graphical interface.
+EOF
 
           dpkg-deb --build pkg passwordgenerator_amd64.deb
+          ls -la passwordgenerator_amd64.deb
 
       - name: Upload Linux package
         uses: actions/upload-artifact@v4
         with:
           name: linux-deb
-          path: pkg/passwordgenerator_amd64.deb
+          path: passwordgenerator_amd64.deb
           retention-days: 30
 
   build-windows:
     runs-on: windows-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - name: Install dependencies
+      - name: Install CMake
         run: |
-          choco install cmake mingw qt5 -y
+          choco install cmake -y
+
+      - name: Install MinGW
+        run: |
+          choco install mingw -y
+
+      - name: Install Qt5
+        run: |
+          choco install qt5 -y
+        timeout-minutes: 15
 
       - name: Configure with CMake
         shell: bash
         run: |
+          export PATH="/c/Program Files/CMake/bin:$PATH"
+          export PATH="/c/Qt/5.*/mingw*/bin:$PATH"
+          export PATH="/c/tools/mingw64/bin:$PATH"
+
           mkdir -p build
           cd build
           cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release ..
@@ -106,21 +126,21 @@ jobs:
         shell: bash
         run: |
           mkdir -p installer
-          cp build/passwordgenerator.exe installer/
-          cp README.md installer/
+          cp build/passwordgenerator.exe installer/ 2>/dev/null || cp build/Release/passwordgenerator.exe installer/ 2>/dev/null || ls -la build/
+          cp README.md installer/ 2>/dev/null || true
 
       - name: Upload Windows package
         uses: actions/upload-artifact@v4
         with:
           name: windows-exe
-          path: installer/passwordgenerator.exe
+          path: installer/*.exe
           retention-days: 30
 
   build-macos:
     runs-on: macos-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Qt5
         run: |
@@ -131,8 +151,8 @@ jobs:
         run: |
           mkdir -p build
           cd build
-          export Qt5_DIR="$(brew --prefix qt5)/lib/cmake/Qt5"
-          cmake -DCMAKE_PREFIX_PATH="$(brew --prefix qt5)" -DCMAKE_BUILD_TYPE=Release ..
+          export CMAKE_PREFIX_PATH="$(brew --prefix qt5)"
+          cmake -DCMAKE_PREFIX_PATH="$CMAKE_PREFIX_PATH" -DCMAKE_BUILD_TYPE=Release ..
           make
 
       - name: Create macOS app bundle
@@ -140,28 +160,30 @@ jobs:
         run: |
           mkdir -p PasswordGenerator.app/Contents/MacOS
           mkdir -p PasswordGenerator.app/Contents/Resources
+
           cp build/passwordgenerator PasswordGenerator.app/Contents/MacOS/
+          chmod +x PasswordGenerator.app/Contents/MacOS/passwordgenerator
 
           cat > PasswordGenerator.app/Contents/Info.plist << 'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>CFBundleExecutable</key>
-            <string>passwordgenerator</string>
-            <key>CFBundleIdentifier</key>
-            <string>com.passwordgenerator.app</string>
-            <key>CFBundleName</key>
-            <string>Password Generator</string>
-            <key>CFBundleVersion</key>
-            <string>1.0.0</string>
-            <key>CFBundleShortVersionString</key>
-            <string>1.0.0</string>
-            <key>LSMinimumSystemVersion</key>
-            <string>10.13</string>
-          </dict>
-          </plist>
-          EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+<key>CFBundleExecutable</key>
+<string>passwordgenerator</string>
+<key>CFBundleIdentifier</key>
+<string>com.passwordgenerator.app</string>
+<key>CFBundleName</key>
+<string>Password Generator</string>
+<key>CFBundleVersion</key>
+<string>1.0.0</string>
+<key>CFBundleShortVersionString</key>
+<string>1.0.0</string>
+<key>LSMinimumSystemVersion</key>
+<string>10.13</string>
+</dict>
+</plist>
+EOF
 
           tar -czf PasswordGenerator.tar.gz PasswordGenerator.app
 
@@ -190,15 +212,9 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir -p release
-          if [ -f "artifacts/linux-deb/passwordgenerator_amd64.deb" ]; then
-            cp artifacts/linux-deb/passwordgenerator_amd64.deb release/
-          fi
-          if [ -f "artifacts/windows-exe/passwordgenerator.exe" ]; then
-            cp artifacts/windows-exe/passwordgenerator.exe release/
-          fi
-          if [ -f "artifacts/macos-app/PasswordGenerator.tar.gz" ]; then
-            cp artifacts/macos-app/PasswordGenerator.tar.gz release/
-          fi
+          find artifacts -name "*.deb" -exec cp {} release/ \;
+          find artifacts -name "*.exe" -exec cp {} release/ \;
+          find artifacts -name "*.tar.gz" -exec cp {} release/ \;
           ls -la release/
 
       - name: Create GitHub Release
