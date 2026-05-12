@@ -20,7 +20,7 @@ jobs:
       - name: Install Qt5
         run: |
           sudo apt-get update
-          sudo apt-get install -y qtbase5-dev qtchooser qt5-qmake qtbase5-dev-tools libqt5widgets5
+          sudo apt-get install -y qtbase5-dev qtchooser qt5-qmake qtbase5-dev-tools libqt5widgets5 libqt5gui5
 
       - name: Configure with CMake
         run: |
@@ -36,9 +36,16 @@ jobs:
       - name: Create Debian package
         run: |
           mkdir -p pkg/usr/bin
-          cp build/passwordgenerator pkg/usr/bin/
           mkdir -p pkg/usr/share/applications
+          mkdir -p pkg/usr/share/icons/hicolor/16x16/apps
+          mkdir -p pkg/usr/share/icons/hicolor/24x24/apps
+          mkdir -p pkg/usr/share/icons/hicolor/32x32/apps
           mkdir -p pkg/usr/share/icons/hicolor/48x48/apps
+          mkdir -p pkg/usr/share/icons/hicolor/64x64/apps
+          mkdir -p pkg/usr/share/icons/hicolor/128x128/apps
+          mkdir -p pkg/usr/share/icons/hicolor/256x256/apps
+
+          cp build/passwordgenerator pkg/usr/bin/
 
           cat > pkg/usr/share/applications/passwordgenerator.desktop << 'EOF'
           [Desktop Entry]
@@ -53,16 +60,19 @@ jobs:
           Categories=Utility;Security;
           EOF
 
+          cp icons/hicolor/*/apps/passwordgenerator.png pkg/usr/share/icons/hicolor/*/apps/
+
           mkdir -p pkg/DEBIAN
           cat > pkg/DEBIAN/control << 'EOF'
           Package: passwordgenerator
-          Version: ${{ github.ref_name }}
+          Version: 1.0.0
           Section: utils
           Priority: optional
           Architecture: amd64
-          Depends: libc6 (>= 2.17), libqt5widgets5 (>= 5.6.0), libqt5gui5 (>= 5.6.0)
-          Maintainer: ${{ github.actor }}
+          Depends: libc6 (>= 2.17), libqt5widgets5 (>= 5.6.0), libqt5gui5 (>= 5.6.0), libqt5core5a (>= 5.6.0)
+          Maintainer: Password Generator Team
           Description: A Qt5-based password generator tool
+           A simple and secure password generator with graphical interface.
           EOF
 
           dpkg-deb --build pkg passwordgenerator_amd64.deb
@@ -80,10 +90,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Qt5
+      - name: Install dependencies
         run: |
-          choco install qt5 -y
-          refreshenv
+          choco install cmake mingw qt5 -y
 
       - name: Configure with CMake
         shell: bash
@@ -93,7 +102,7 @@ jobs:
           cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release ..
           mingw32-make
 
-      - name: Create installer directory
+      - name: Create Windows package
         shell: bash
         run: |
           mkdir -p installer
@@ -122,6 +131,7 @@ jobs:
         run: |
           mkdir -p build
           cd build
+          export Qt5_DIR="$(brew --prefix qt5)/lib/cmake/Qt5"
           cmake -DCMAKE_PREFIX_PATH="$(brew --prefix qt5)" -DCMAKE_BUILD_TYPE=Release ..
           make
 
@@ -145,6 +155,10 @@ jobs:
             <string>Password Generator</string>
             <key>CFBundleVersion</key>
             <string>1.0.0</string>
+            <key>CFBundleShortVersionString</key>
+            <string>1.0.0</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>10.13</string>
           </dict>
           </plist>
           EOF
@@ -171,14 +185,20 @@ jobs:
           path: artifacts
 
       - name: Display structure of downloaded files
-        run: ls -la artifacts/
+        run: ls -laR artifacts/
 
       - name: Prepare release files
         run: |
           mkdir -p release
-          cp artifacts/linux-deb/*.deb release/
-          cp artifacts/windows-exe/*.exe release/
-          cp artifacts/macos-app/*.tar.gz release/
+          if [ -f "artifacts/linux-deb/passwordgenerator_amd64.deb" ]; then
+            cp artifacts/linux-deb/passwordgenerator_amd64.deb release/
+          fi
+          if [ -f "artifacts/windows-exe/passwordgenerator.exe" ]; then
+            cp artifacts/windows-exe/passwordgenerator.exe release/
+          fi
+          if [ -f "artifacts/macos-app/PasswordGenerator.tar.gz" ]; then
+            cp artifacts/macos-app/PasswordGenerator.tar.gz release/
+          fi
           ls -la release/
 
       - name: Create GitHub Release
