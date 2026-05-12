@@ -1,0 +1,131 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install Qt5
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qt5-qmake qtbase5-dev
+
+      - name: Configure with CMake
+        run: |
+          mkdir -p build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=Release ..
+
+      - name: Build
+        run: |
+          cd build
+          make -j$(nproc)
+
+      - name: Upload Linux binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-binary
+          path: build/passwordgenerator
+          retention-days: 30
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Configure Qt5
+        run: |
+          choco install cmake qt5 -y --force
+
+      - name: Configure with CMake
+        shell: pwsh
+        run: |
+          $env:Path = "C:\Program Files\CMake\bin;C:\Qt\5.*\mingw*\bin;C:\tools\mingw64\bin;$env:Path"
+          mkdir build
+          cd build
+          cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release ..
+          cmake --build . --config Release
+
+      - name: Upload Windows binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-binary
+          path: build/Release/passwordgenerator.exe
+          retention-days: 30
+
+  build-macos:
+    runs-on: macos-14
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install Qt5
+        run: |
+          brew install qt5
+          brew install cmake
+
+      - name: Configure with CMake
+        shell: zsh
+        run: |
+          export CMAKE_PREFIX_PATH="$(brew --prefix qt5)"
+          mkdir build
+          cd build
+          cmake -DCMAKE_PREFIX_PATH="$CMAKE_PREFIX_PATH" -DCMAKE_BUILD_TYPE=Release ..
+          cmake --build . --config Release
+
+      - name: Upload macOS binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-binary
+          path: build/passwordgenerator
+          retention-days: 30
+
+  release:
+    needs: [build-linux, build-windows, build-macos]
+    runs-on: ubuntu-24.04
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Download Linux binary
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-binary
+          path: release
+
+      - name: Download Windows binary
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-binary
+          path: release
+
+      - name: Download macOS binary
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-binary
+          path: release
+
+      - name: List downloaded files
+        run: ls -la release/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
