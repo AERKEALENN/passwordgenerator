@@ -33,11 +33,6 @@ jobs:
           cd build
           make -j$(nproc)
 
-      - name: Verify build
-        run: |
-          ls -la build/passwordgenerator
-          file build/passwordgenerator
-
       - name: Upload Linux binary
         uses: actions/upload-artifact@v4
         with:
@@ -46,56 +41,40 @@ jobs:
           retention-days: 30
 
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Install CMake and Qt5
+      - name: Install MSYS2 and Qt5
         run: |
-          choco install cmake -y
-          choco install mingw -y
-
-      - name: Verify Qt5 installation
-        run: |
-          dir "C:\Qt" /s /b 2>nul || echo "Qt not in C:\Qt"
-          where qmake 2>nul || echo "qmake not in PATH"
-          where mingw32-make 2>nul || echo "mingw32-make not in PATH"
+          choco install msys2 -y
+          refreshenv
+          pacman -Sy --noconfirm mingw-w64-x86_64-qt5-base mingw-w64-x86_64-cmake mingw-w64-x86_64-toolchain
 
       - name: Configure with CMake
         run: |
-          mkdir build
-          cd build
-          cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release ..
-          if %ERRORLEVEL% NEQ 0 exit /b 1
+          C:\tools\msys64\mingw64\bin\cmake.exe -G "MinGW Makefiles" -B build -DCMAKE_BUILD_TYPE=Release ..
+          if %ERRORLEVEL% NEQ 0 (
+            echo CMake configure failed
+            exit /b 1
+          )
 
       - name: Build
         run: |
-          cd build
-          mingw32-make -j4
+          C:\tools\msys64\mingw64\bin\cmake.exe --build build --config Release
           if %ERRORLEVEL% NEQ 0 (
-            echo Build failed, trying without parallel
-            mingw32-make
+            echo Build failed
+            exit /b 1
           )
 
-      - name: Find and list exe files
+      - name: Verify exe exists
         run: |
-          echo === Searching for exe files ===
-          dir /s /b build\*.exe 2>nul
-          echo === Build directory contents ===
-          dir build\Release /s /b 2>nul || dir build /s /b 2>nul
-
-      - name: Copy exe to expected location
-        run: |
-          if exist build\Release\passwordgenerator.exe (
-            copy build\Release\passwordgenerator.exe build\passwordgenerator.exe
-          ) else (
-            for /r %%i in (passwordgenerator.exe) do copy "%%i" build\passwordgenerator.exe
-          )
           if exist build\passwordgenerator.exe (
-            echo Successfully copied exe
+            echo Build successful: build\passwordgenerator.exe
           ) else (
-            echo Warning: exe not found
+            echo Warning: exe not found, checking build folder
+            dir build /s /b 2>nul
           )
 
       - name: Upload Windows binary
@@ -138,22 +117,9 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download Linux binary
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: linux-binary
-          path: release
-
-      - name: Download Windows binary
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-binary
-          path: release
-
-      - name: Download macOS binary
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-binary
           path: release
 
       - name: List downloaded files
