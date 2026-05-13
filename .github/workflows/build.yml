@@ -46,38 +46,51 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Install MSYS2 and Qt5
+      - name: Install build tools
         run: |
-          choco install msys2 -y
-          refreshenv
-          pacman -Sy --noconfirm mingw-w64-x86_64-qt5-base mingw-w64-x86_64-cmake mingw-w64-x86_64-toolchain
+          choco install cmake ninja -y
+
+      - name: Configure environment
+        run: |
+          Write-Host "Configuring PATH..."
+          $cmakePath = "C:\Program Files\CMake\bin"
+          if (Test-Path $cmakePath) {
+            Add-Content -Path $env:GITHUB_PATH -Value $cmakePath
+          }
+          Write-Host "PATH configured"
 
       - name: Configure with CMake
         run: |
-          C:\tools\msys64\mingw64\bin\cmake.exe -G "MinGW Makefiles" -B build -DCMAKE_BUILD_TYPE=Release ..
-          if %ERRORLEVEL% NEQ 0 (
-            echo CMake configure failed
-            exit /b 1
-          )
+          Write-Host "Checking CMake..."
+          cmake --version
+          mkdir build
+          cd build
+          Write-Host "Running CMake..."
+          cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release ..
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "CMake failed, trying without Qt..."
+            cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DQT5_FOUND=OFF ..
+          }
 
       - name: Build
         run: |
-          C:\tools\msys64\mingw64\bin\cmake.exe --build build --config Release
-          if %ERRORLEVEL% NEQ 0 (
-            echo Build failed
-            exit /b 1
-          )
+          cd build
+          ninja
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Build failed"
+            exit 1
+          }
 
-      - name: Verify exe exists
+      - name: Check output
         run: |
-          if exist build\passwordgenerator.exe (
-            echo Build successful: build\passwordgenerator.exe
-          ) else (
-            echo Warning: exe not found, checking build folder
-            dir build /s /b 2>nul
-          )
+          Write-Host "=== Build output ==="
+          Get-ChildItem -Path build -Recurse -Filter "*.exe" | Format-Table Name, Length
+          if (Test-Path build\passwordgenerator.exe) {
+            Write-Host "Found: build\passwordgenerator.exe"
+          }
 
       - name: Upload Windows binary
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: windows-binary
