@@ -33,6 +33,11 @@ jobs:
           cd build
           make -j$(nproc)
 
+      - name: Verify build
+        run: |
+          ls -la build/passwordgenerator
+          file build/passwordgenerator
+
       - name: Upload Linux binary
         uses: actions/upload-artifact@v4
         with:
@@ -48,20 +53,50 @@ jobs:
 
       - name: Install CMake and Qt5
         run: |
-          choco install cmake qt5 -y
+          choco install cmake -y
+          choco install mingw -y
+
+      - name: Verify Qt5 installation
+        run: |
+          dir "C:\Qt" /s /b 2>nul || echo "Qt not in C:\Qt"
+          where qmake 2>nul || echo "qmake not in PATH"
+          where mingw32-make 2>nul || echo "mingw32-make not in PATH"
 
       - name: Configure with CMake
-        shell: bash
         run: |
-          export PATH="/c/Program Files/CMake/bin:/c/Qt/5.*/mingw*/bin:/c/tools/mingw64/bin:$PATH"
           mkdir build
           cd build
           cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release ..
-          cmake --build . --config Release
+          if %ERRORLEVEL% NEQ 0 exit /b 1
 
-      - name: Find Windows binary
+      - name: Build
         run: |
-          find build -name "*.exe" -type f 2>/dev/null || echo "No exe found"
+          cd build
+          mingw32-make -j4
+          if %ERRORLEVEL% NEQ 0 (
+            echo Build failed, trying without parallel
+            mingw32-make
+          )
+
+      - name: Find and list exe files
+        run: |
+          echo === Searching for exe files ===
+          dir /s /b build\*.exe 2>nul
+          echo === Build directory contents ===
+          dir build\Release /s /b 2>nul || dir build /s /b 2>nul
+
+      - name: Copy exe to expected location
+        run: |
+          if exist build\Release\passwordgenerator.exe (
+            copy build\Release\passwordgenerator.exe build\passwordgenerator.exe
+          ) else (
+            for /r %%i in (passwordgenerator.exe) do copy "%%i" build\passwordgenerator.exe
+          )
+          if exist build\passwordgenerator.exe (
+            echo Successfully copied exe
+          ) else (
+            echo Warning: exe not found
+          )
 
       - name: Upload Windows binary
         uses: actions/upload-artifact@v4
@@ -76,14 +111,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Install Qt5
+      - name: Install Qt5 and CMake
         run: |
-          brew install qt5
+          brew install qt@5
           brew install cmake
 
       - name: Configure with CMake
         run: |
-          export CMAKE_PREFIX_PATH="$(brew --prefix qt5)"
+          export CMAKE_PREFIX_PATH="$(brew --prefix qt@5)"
           mkdir build
           cd build
           cmake -DCMAKE_PREFIX_PATH="$CMAKE_PREFIX_PATH" -DCMAKE_BUILD_TYPE=Release ..
